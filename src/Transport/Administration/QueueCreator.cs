@@ -3,6 +3,7 @@
     using System;
     using System.Linq;
     using System.Threading.Tasks;
+    using Azure.Core;
     using Microsoft.Azure.ServiceBus;
     using Microsoft.Azure.ServiceBus.Management;
     using Microsoft.Azure.ServiceBus.Primitives;
@@ -20,7 +21,7 @@
         readonly bool enablePartitioning;
         readonly Func<string, string> subscriptionShortener;
 
-        public QueueCreator(string mainInputQueueName, string topicName, ServiceBusConnectionStringBuilder connectionStringBuilder, ITokenProvider tokenProvider, NamespacePermissions namespacePermissions, int maxSizeInMB, bool enablePartitioning, Func<string, string> subscriptionShortener)
+        public QueueCreator(string mainInputQueueName, string topicName, ServiceBusConnectionStringBuilder connectionStringBuilder, TokenCredential tokenProvider, NamespacePermissions namespacePermissions, int maxSizeInMB, bool enablePartitioning, Func<string, string> subscriptionShortener)
         {
             this.mainInputQueueName = mainInputQueueName;
             this.topicName = topicName;

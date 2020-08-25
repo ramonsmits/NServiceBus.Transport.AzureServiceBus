@@ -4,10 +4,10 @@
     using System.Collections.Generic;
     using System.Text;
     using System.Threading.Tasks;
+    using Azure.Core;
+    using Azure.Messaging.ServiceBus;
     using DelayedDelivery;
     using Features;
-    using Microsoft.Azure.ServiceBus;
-    using Microsoft.Azure.ServiceBus.Primitives;
     using Performance.TimeToBeReceived;
     using Routing;
     using Settings;
@@ -20,7 +20,7 @@
 
         readonly SettingsHolder settings;
         readonly ServiceBusConnectionStringBuilder connectionStringBuilder;
-        readonly ITokenProvider tokenProvider;
+        readonly TokenCredential tokenCredential;
         readonly string topicName;
         readonly NamespacePermissions namespacePermissions;
         MessageSenderPool messageSenderPool;
@@ -30,12 +30,12 @@
             this.settings = settings;
             connectionStringBuilder = new ServiceBusConnectionStringBuilder(connectionString);
 
-            if (settings.TryGet(SettingsKeys.TransportType, out TransportType transportType))
+            if (settings.TryGet(SettingsKeys.TransportType, out ServiceBusTransportType transportType))
             {
                 connectionStringBuilder.TransportType = transportType;
             }
 
-            settings.TryGet(SettingsKeys.CustomTokenProvider, out tokenProvider);
+            settings.TryGet(SettingsKeys.CustomTokenCredentials, out tokenCredential);
 
             if (!settings.TryGet(SettingsKeys.TopicName, out topicName))
             {
@@ -44,7 +44,7 @@
 
             settings.EnableFeatureByDefault<TransactionScopeSuppressFeature>();
 
-            namespacePermissions = new NamespacePermissions(connectionStringBuilder, tokenProvider);
+            namespacePermissions = new NamespacePermissions(connectionStringBuilder, tokenCredential);
 
             WriteStartupDiagnostics();
         }
@@ -60,10 +60,10 @@
                 RuleNameShortener = settings.TryGet(SettingsKeys.RuleNameShortener, out Func<string, string> _) ? "configured" : "default",
                 PrefetchMultiplier = settings.TryGet(SettingsKeys.PrefetchMultiplier, out int prefetchMultiplier) ? prefetchMultiplier.ToString() : "default",
                 PrefetchCount = settings.TryGet(SettingsKeys.PrefetchCount, out int? prefetchCount) ? prefetchCount.ToString() : "default",
-                UseWebSockets = settings.TryGet(SettingsKeys.TransportType, out TransportType _) ? "True" : "default",
+                UseWebSockets = settings.TryGet(SettingsKeys.TransportType, out ServiceBusTransportType _) ? "True" : "default",
                 TimeToWaitBeforeTriggeringCircuitBreaker = settings.TryGet(SettingsKeys.TransportType, out TimeSpan timeToWait) ? timeToWait.ToString() : "default",
-                CustomTokenProvider = settings.TryGet(SettingsKeys.CustomTokenProvider, out ITokenProvider customTokenProvider) ? customTokenProvider.ToString() : "default",
-                CustomRetryPolicy = settings.TryGet(SettingsKeys.CustomRetryPolicy, out RetryPolicy customRetryPolicy) ? customRetryPolicy.ToString() : "default"
+                CustomTokenProvider = settings.TryGet(SettingsKeys.CustomTokenCredentials, out TokenCredential customTokenCredential) ? customTokenCredential.ToString() : "default",
+                CustomRetryPolicy = settings.TryGet(SettingsKeys.CustomRetryPolicy, out ServiceBusRetryPolicy customRetryPolicy) ? customRetryPolicy.ToString() : "default"
             });
         }
 
@@ -89,9 +89,9 @@
                 timeToWaitBeforeTriggeringCircuitBreaker = TimeSpan.FromMinutes(2);
             }
 
-            settings.TryGet(SettingsKeys.CustomRetryPolicy, out RetryPolicy retryPolicy);
+            settings.TryGet(SettingsKeys.CustomRetryPolicy, out ServiceBusRetryPolicy retryPolicy);
 
-            return new MessagePump(connectionStringBuilder, tokenProvider, prefetchMultiplier, prefetchCount, timeToWaitBeforeTriggeringCircuitBreaker, retryPolicy);
+            return new MessagePump(connectionStringBuilder, tokenCredential, prefetchMultiplier, prefetchCount, timeToWaitBeforeTriggeringCircuitBreaker, retryPolicy);
         }
 
         QueueCreator CreateQueueCreator()
@@ -120,7 +120,7 @@
                 localAddress = ToTransportAddress(LogicalAddress.CreateLocalAddress(settings.EndpointName(), new Dictionary<string, string>()));
             }
 
-            return new QueueCreator(localAddress, topicName, connectionStringBuilder, tokenProvider, namespacePermissions, maximumSizeInGB * 1024, enablePartitioning, subscriptionNameShortener);
+            return new QueueCreator(localAddress, topicName, connectionStringBuilder, tokenCredential, namespacePermissions, maximumSizeInGB * 1024, enablePartitioning, subscriptionNameShortener);
         }
 
         public override TransportSendInfrastructure ConfigureSendInfrastructure()
@@ -132,9 +132,11 @@
 
         MessageDispatcher CreateMessageDispatcher()
         {
-            settings.TryGet(SettingsKeys.CustomRetryPolicy, out RetryPolicy retryPolicy);
+            settings.TryGet(SettingsKeys.CustomRetryPolicy, out ServiceBusRetryPolicy retryPolicy);
 
-            messageSenderPool = new MessageSenderPool(connectionStringBuilder, tokenProvider, retryPolicy);
+            var client = new ServiceBusClient("connString or FQDN", tokenCredential, new ServiceBusClientOptions() {/*TransportType = getfromsettings, RetryOptions = getfromoptions, Proxy = getfromoptions*/});
+
+            messageSenderPool = new MessageSenderPool(client);
 
             return new MessageDispatcher(messageSenderPool, topicName);
         }
@@ -156,7 +158,7 @@
                 ruleNameShortener = defaultNameShortener;
             }
 
-            return new SubscriptionManager(settings.LocalAddress(), topicName, connectionStringBuilder, tokenProvider, namespacePermissions, subscriptionNameShortener, ruleNameShortener);
+            return new SubscriptionManager(settings.LocalAddress(), topicName, connectionStringBuilder, tokenCredential, namespacePermissions, subscriptionNameShortener, ruleNameShortener);
         }
 
         public override EndpointInstance BindToLocalEndpoint(EndpointInstance instance) => instance;

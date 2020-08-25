@@ -1,6 +1,7 @@
 ﻿namespace NServiceBus
 {
     using System;
+    using Azure.Core;
     using Configuration.AdvancedExtensibility;
     using Microsoft.Azure.ServiceBus;
     using Microsoft.Azure.ServiceBus.Primitives;
@@ -160,10 +161,10 @@
         /// Overrides the default token provider with a custom implementation.
         /// </summary>
         /// <param name="transportExtensions"></param>
-        /// <param name="tokenProvider">The token provider to be used.</param>
-        public static TransportExtensions<AzureServiceBusTransport> CustomTokenProvider(this TransportExtensions<AzureServiceBusTransport> transportExtensions, ITokenProvider tokenProvider)
+        /// <param name="tokenCredential">The token provider to be used.</param>
+        public static TransportExtensions<AzureServiceBusTransport> CustomTokenCredential(this TransportExtensions<AzureServiceBusTransport> transportExtensions, TokenCredential tokenCredential)
         {
-            transportExtensions.GetSettings().Set(SettingsKeys.CustomTokenProvider, tokenProvider);
+            transportExtensions.GetSettings().Set(SettingsKeys.CustomTokenCredentials, tokenCredential);
 
             return transportExtensions;
         }

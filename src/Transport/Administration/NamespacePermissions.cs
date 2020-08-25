@@ -2,40 +2,36 @@
 {
     using System;
     using System.Threading.Tasks;
-    using Microsoft.Azure.ServiceBus;
-    using Microsoft.Azure.ServiceBus.Management;
-    using Microsoft.Azure.ServiceBus.Primitives;
+    using Azure.Core;
+    using Azure.Messaging.ServiceBus;
+    using Azure.Messaging.ServiceBus.Management;
 
     class NamespacePermissions
     {
         readonly ServiceBusConnectionStringBuilder connectionStringBuilder;
-        readonly ITokenProvider tokenProvider;
+        readonly TokenCredential tokenCredential;
 
-        public NamespacePermissions(ServiceBusConnectionStringBuilder connectionStringBuilder, ITokenProvider tokenProvider)
+        public NamespacePermissions(ServiceBusConnectionStringBuilder connectionStringBuilder, TokenCredential tokenCredential)
         {
             this.connectionStringBuilder = connectionStringBuilder;
-            this.tokenProvider = tokenProvider;
+            this.tokenCredential = tokenCredential;
         }
 
         public async Task<StartupCheckResult> CanManage()
         {
-            var client = new ManagementClient(connectionStringBuilder, tokenProvider);
+            var client = new ServiceBusManagementClient(/*connectionStringBuilder*/"connectionstring or FQDN", tokenCredential);
 
             try
             {
                 await client.QueueExistsAsync("$nservicebus-verification-queue").ConfigureAwait(false);
             }
-            catch (UnauthorizedException)
+            catch (ServiceBusException ex) when(ex.Reason == ServiceBusFailureReason.Unauthorized)
             {
                 return StartupCheckResult.Failed("Management rights are required to run this endpoint. Verify that the SAS policy has the Manage claim.");
             }
             catch (Exception exception)
             {
                 return StartupCheckResult.Failed(exception.Message);
-            }
-            finally
-            {
-                await client.CloseAsync().ConfigureAwait(false);
             }
 
             return StartupCheckResult.Success;

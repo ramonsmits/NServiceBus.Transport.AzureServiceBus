@@ -2,6 +2,7 @@
 {
     using System;
     using System.Threading.Tasks;
+    using Azure.Core;
     using Extensibility;
     using Microsoft.Azure.ServiceBus;
     using Microsoft.Azure.ServiceBus.Management;
@@ -20,7 +21,7 @@
 
         StartupCheckResult startupCheckResult;
 
-        public SubscriptionManager(string inputQueueName, string topicPath, ServiceBusConnectionStringBuilder connectionStringBuilder, ITokenProvider tokenProvider, NamespacePermissions namespacePermissions, Func<string, string> subscriptionShortener, Func<string, string> ruleShortener)
+        public SubscriptionManager(string inputQueueName, string topicPath, ServiceBusConnectionStringBuilder connectionStringBuilder, TokenCredential tokenProvider, NamespacePermissions namespacePermissions, Func<string, string> subscriptionShortener, Func<string, string> ruleShortener)
         {
             this.topicPath = topicPath;
             this.connectionStringBuilder = connectionStringBuilder;

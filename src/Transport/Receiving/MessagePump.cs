@@ -5,6 +5,8 @@
     using System.Threading;
     using System.Threading.Tasks;
     using System.Transactions;
+    using Azure.Core;
+    using Azure.Messaging.ServiceBus;
     using Extensibility;
     using Logging;
     using Microsoft.Azure.ServiceBus;
@@ -37,8 +39,8 @@
 
         static readonly ILog logger = LogManager.GetLogger<MessagePump>();
 
-        public MessagePump(ServiceBusConnectionStringBuilder connectionStringBuilder, ITokenProvider tokenProvider, int prefetchMultiplier, int? overriddenPrefetchCount,
-            TimeSpan timeToWaitBeforeTriggeringCircuitBreaker, RetryPolicy retryPolicy)
+        public MessagePump(ServiceBusConnectionStringBuilder connectionStringBuilder, TokenCredential tokenProvider, int prefetchMultiplier, int? overriddenPrefetchCount,
+            TimeSpan timeToWaitBeforeTriggeringCircuitBreaker, ServiceBusRetryPolicy retryPolicy)
         {
             this.connectionStringBuilder = connectionStringBuilder;
             this.tokenProvider = tokenProvider;

@@ -4,7 +4,6 @@
     using System.Threading.Tasks;
     using System.Transactions;
     using Extensibility;
-    using Microsoft.Azure.ServiceBus;
 
     class MessageDispatcher : IDispatchMessages
     {
@@ -53,7 +52,7 @@
                     using (var scope = CreateTransactionScope(transportOperation.RequiredDispatchConsistency, shouldSuppressTransaction))
                     {
                         // Invoke sender and immediately return it back to the pool w/o awaiting for completion
-                        tasks.Add(sender.SendAsync(message));
+                        tasks.Add(sender.SendMessageAsync(message));
                         scope?.Complete();
                     }
                 }
@@ -76,7 +75,7 @@
                     using (var scope = CreateTransactionScope(transportOperation.RequiredDispatchConsistency, shouldSuppressTransaction))
                     {
                         // Invoke sender and immediately return it back to the pool w/o awaiting for completion
-                        tasks.Add(sender.SendAsync(message));
+                        tasks.Add(sender.SendMessageAsync(message));
                         scope?.Complete();
                     }
                 }
