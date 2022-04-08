@@ -4,6 +4,7 @@
     using System.Threading.Tasks;
     using System.Transactions;
     using Azure.Messaging.ServiceBus;
+    using DeliveryConstraints;
     using Extensibility;
 
     class MessageDispatcher : IDispatchMessages
@@ -29,6 +30,30 @@
 
             var tasks = new List<Task>(unicastTransportOperations.Count + multicastTransportOperations.Count);
 
+            async Task Send(IOutgoingTransportOperation oto, string destination)
+            {
+                var message = oto.Message.ToAzureServiceBusMessage(oto.DeliveryConstraints, partitionKey);
+                var sender = messageSenderPool.GetMessageSender(destination, serviceBusClient);
+
+                try
+                {
+                    ApplyCustomizationToOutgoingNativeMessage(context, oto, message);
+                    var transactionToUse = oto.RequiredDispatchConsistency == DispatchConsistency.Isolated ? null : committableTransaction;
+                    using (var scope = transactionToUse.ToScope())
+                    {
+                        // Invoke sender and immediately return it back to the pool w/o awaiting for completion
+                        await sender.SendMessageAsync(message)
+                            .ConfigureAwait(false);
+                        //committable tx will not be committed because this scope is not the owner
+                        scope.Complete();
+                    }
+                }
+                finally
+                {
+                    messageSenderPool.ReturnMessageSender(sender, serviceBusClient);
+                }
+            }
+
             foreach (var transportOperation in unicastTransportOperations)
             {
                 var destination = transportOperation.Destination;
@@ -41,52 +66,12 @@
                     destination = destination.Substring(0, index);
                 }
 
-                var sender = messageSenderPool.GetMessageSender(destination, serviceBusClient);
-
-                try
-                {
-                    var message = transportOperation.Message.ToAzureServiceBusMessage(transportOperation.DeliveryConstraints, partitionKey);
-
-                    ApplyCustomizationToOutgoingNativeMessage(context, transportOperation, message);
-
-                    var transactionToUse = transportOperation.RequiredDispatchConsistency == DispatchConsistency.Isolated ? null : committableTransaction;
-                    using (var scope = transactionToUse.ToScope())
-                    {
-                        // Invoke sender and immediately return it back to the pool w/o awaiting for completion
-                        tasks.Add(sender.SendMessageAsync(message));
-
-                        scope.Complete();
-                    }
-                }
-                finally
-                {
-                    messageSenderPool.ReturnMessageSender(sender, serviceBusClient);
-                }
+                tasks.Add(Send(transportOperation, destination));
             }
 
             foreach (var transportOperation in multicastTransportOperations)
             {
-                var sender = messageSenderPool.GetMessageSender(topicName, serviceBusClient);
-
-                try
-                {
-                    var message = transportOperation.Message.ToAzureServiceBusMessage(transportOperation.DeliveryConstraints, partitionKey);
-
-                    ApplyCustomizationToOutgoingNativeMessage(context, transportOperation, message);
-
-                    var transactionToUse = transportOperation.RequiredDispatchConsistency == DispatchConsistency.Isolated ? null : committableTransaction;
-                    using (var scope = transactionToUse.ToScope())
-                    {
-                        // Invoke sender and immediately return it back to the pool w/o awaiting for completion
-                        tasks.Add(sender.SendMessageAsync(message));
-                        //committable tx will not be committed because this scope is not the owner
-                        scope.Complete();
-                    }
-                }
-                finally
-                {
-                    messageSenderPool.ReturnMessageSender(sender, serviceBusClient);
-                }
+                tasks.Add(Send(transportOperation, topicName));
             }
 
             return tasks.Count == 1 ? tasks[0] : Task.WhenAll(tasks);
