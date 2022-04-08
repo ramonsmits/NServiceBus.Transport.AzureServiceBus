@@ -4,7 +4,6 @@
     using System.Threading.Tasks;
     using System.Transactions;
     using Azure.Messaging.ServiceBus;
-    using DeliveryConstraints;
     using Extensibility;
 
     class MessageDispatcher : IDispatchMessages
