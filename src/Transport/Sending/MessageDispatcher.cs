@@ -1,5 +1,6 @@
 ﻿namespace NServiceBus.Transport.AzureServiceBus
 {
+    using System;
     using System.Collections.Generic;
     using System.Threading.Tasks;
     using System.Transactions;
@@ -22,7 +23,7 @@
             // Assumption: we're not implementing batching as it will be done by ASB client
             transaction.TryGet<ServiceBusClient>(out var serviceBusClient);
             transaction.TryGet<string>("IncomingQueue.PartitionKey", out var partitionKey);
-            transaction.TryGet<CommittableTransaction>(out var committableTransaction);
+            transaction.TryGet<Lazy<CommittableTransaction>>(out var committableTransaction);
 
             var unicastTransportOperations = outgoingMessages.UnicastTransportOperations;
             var multicastTransportOperations = outgoingMessages.MulticastTransportOperations;
@@ -37,7 +38,7 @@
                 try
                 {
                     ApplyCustomizationToOutgoingNativeMessage(context, oto, message);
-                    var transactionToUse = oto.RequiredDispatchConsistency == DispatchConsistency.Isolated ? null : committableTransaction;
+                    var transactionToUse = oto.RequiredDispatchConsistency == DispatchConsistency.Isolated ? null : committableTransaction.Value;
                     using (var scope = transactionToUse.ToScope())
                     {
                         // Invoke sender and immediately return it back to the pool w/o awaiting for completion

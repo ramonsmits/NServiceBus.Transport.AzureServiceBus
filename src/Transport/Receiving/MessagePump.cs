@@ -223,9 +223,9 @@
             try
             {
                 using (var receiveCancellationTokenSource = new CancellationTokenSource())
-                using (var transaction = CreateTransaction())
+                using (var transaction = CreateTransactionScope())
                 {
-                    var transportTransaction = CreateTransportTransaction(message.PartitionKey, transaction);
+                    var transportTransaction = CreateTransportTransaction(message.PartitionKey);
 
                     var contextBag = new ContextBag();
                     contextBag.Set(message);
@@ -239,17 +239,16 @@
 
                     if (receiveCancellationTokenSource.IsCancellationRequested == false)
                     {
-                        await receiver.SafeCompleteMessageAsync(message, pushSettings.RequiredTransactionMode, transaction)
+                        await receiver.CompleteMessageAsync(message, cancellationToken: CancellationToken.None)
                             .ConfigureAwait(false);
 
-                        transaction?.Commit();
+                        transaction?.Complete();
                     }
 
                     if (receiveCancellationTokenSource.IsCancellationRequested)
                     {
-                        await receiver.SafeAbandonMessageAsync(message, pushSettings.RequiredTransactionMode).ConfigureAwait(false);
-
-                        transaction?.Rollback();
+                        await receiver.AbandonMessageAsync(message, cancellationToken: CancellationToken.None)
+                            .ConfigureAwait(false);
                     }
                 }
             }
@@ -259,9 +258,9 @@
                 {
                     ErrorHandleResult result;
 
-                    using (var transaction = CreateTransaction())
+                    using (var transaction = CreateTransactionScope())
                     {
-                        var transportTransaction = CreateTransportTransaction(message.PartitionKey, transaction);
+                        var transportTransaction = CreateTransportTransaction(message.PartitionKey);
 
                         var errorContext = new ErrorContext(exception, message.GetNServiceBusHeaders(), messageId, body.ToArray(), transportTransaction, message.DeliveryCount);
 
@@ -269,15 +268,15 @@
 
                         if (result == ErrorHandleResult.Handled)
                         {
-                            await receiver.SafeCompleteMessageAsync(message, pushSettings.RequiredTransactionMode, transaction).ConfigureAwait(false);
+                            await receiver.CompleteMessageAsync(message, cancellationToken: CancellationToken.None).ConfigureAwait(false);
                         }
 
-                        transaction?.Commit();
+                        transaction.Complete();
                     }
 
                     if (result == ErrorHandleResult.RetryRequired)
                     {
-                        await receiver.SafeAbandonMessageAsync(message, pushSettings.RequiredTransactionMode).ConfigureAwait(false);
+                        await receiver.AbandonMessageAsync(message, cancellationToken: CancellationToken.None).ConfigureAwait(false);
                     }
                 }
                 catch (ServiceBusException onErrorException) when (onErrorException.Reason == ServiceBusFailureReason.MessageLockLost || onErrorException.Reason == ServiceBusFailureReason.ServiceTimeout)
@@ -288,23 +287,21 @@
                 {
                     criticalError.Raise($"Failed to execute recoverability policy for message with native ID: `{message.MessageId}`", onErrorException);
 
-                    await receiver.SafeAbandonMessageAsync(message, pushSettings.RequiredTransactionMode).ConfigureAwait(false);
+                    await receiver.AbandonMessageAsync(message, cancellationToken: CancellationToken.None).ConfigureAwait(false);
                 }
             }
         }
 
-        CommittableTransaction CreateTransaction()
+        TransactionScope CreateTransactionScope()
         {
-            return pushSettings.RequiredTransactionMode == TransportTransactionMode.SendsAtomicWithReceive
-                ? new CommittableTransaction(new TransactionOptions
-                {
-                    IsolationLevel = IsolationLevel.Serializable,
-                    Timeout = TransactionManager.MaximumTimeout
-                })
-                : null;
+            return new TransactionScope(
+                pushSettings.RequiredTransactionMode == TransportTransactionMode.SendsAtomicWithReceive ? TransactionScopeOption.RequiresNew : TransactionScopeOption.Suppress,
+                TimeSpan.FromMinutes(2), // AzureServiceBusMaxTimeoutDuration according to docs
+                TransactionScopeAsyncFlowOption.Enabled
+                );
         }
 
-        TransportTransaction CreateTransportTransaction(string incomingQueuePartitionKey, CommittableTransaction transaction)
+        TransportTransaction CreateTransportTransaction(string incomingQueuePartitionKey)
         {
             var transportTransaction = new TransportTransaction();
 
@@ -312,7 +309,6 @@
             {
                 transportTransaction.Set(serviceBusClient);
                 transportTransaction.Set("IncomingQueue.PartitionKey", incomingQueuePartitionKey);
-                transportTransaction.Set(transaction);
             }
 
             return transportTransaction;

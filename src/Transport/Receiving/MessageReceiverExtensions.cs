@@ -6,7 +6,7 @@
 
     static class MessageReceiverExtensions
     {
-        public static async Task SafeCompleteMessageAsync(this ServiceBusReceiver messageReceiver, ServiceBusReceivedMessage message, TransportTransactionMode transportTransactionMode, Transaction committableTransaction = null)
+        public static async Task SafeCompleteMessageAsync2(this ServiceBusReceiver messageReceiver, ServiceBusReceivedMessage message, TransportTransactionMode transportTransactionMode, Transaction committableTransaction = null)
         {
             if (transportTransactionMode != TransportTransactionMode.None)
             {
@@ -19,7 +19,7 @@
             }
         }
 
-        public static async Task SafeAbandonMessageAsync(this ServiceBusReceiver messageReceiver, ServiceBusReceivedMessage message, TransportTransactionMode transportTransactionMode, Transaction committableTransaction = null)
+        public static async Task SafeAbandonMessageAsync2(this ServiceBusReceiver messageReceiver, ServiceBusReceivedMessage message, TransportTransactionMode transportTransactionMode, Transaction committableTransaction = null)
         {
             if (transportTransactionMode != TransportTransactionMode.None)
             {
